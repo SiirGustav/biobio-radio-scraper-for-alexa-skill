@@ -1,0 +1,11 @@
+{
+	"name": "powerpudu-biobio-scraper",
+	"version": "1.0.0",
+	"description": "Radio Bio-Bio scraper, to generate feed for Alexa Flash Briefing",
+	"main": "scraper.js",
+	"dependencies": {
+		"axios": "^1.6.0",
+		"cheerio": "^1.0.0-rc.12",
+		"playwright": "^1.60.0"
+	}
+}

@@ -1,0 +1,36 @@
+name: Actualizador Diario de Noticias Alexa
+
+on:
+  schedule:
+    - cron: '0 11,18 * * *'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Descargar repositorio
+      uses: actions/checkout@v3
+
+    - name: Configurar Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: 18
+
+    - name: Instalar Dependencias
+      run: npm install
+
+    - name: Instalar Navegadores de Playwright
+      run: npx playwright install chromium
+
+    - name: Ejecutar Extractor de Noticias
+      run: node scraper.js
+
+    - name: Comprometer y Subir Cambios a GitHub Pages
+      run: |
+        git config --global user.name "Alexa Scraper Bot"
+        git config --global user.email "actions@github.com"
+        git add feed.json
+        git diff-index --quiet HEAD || git commit -m "Sistema: Actualización de noticias del feed JSON"
+        git push origin main
