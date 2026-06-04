@@ -29,35 +29,35 @@ async function scrapeBioBio() {
 		await page.waitForSelector('div[style*="display: none"] a, a.mb-6', { state: 'attached', timeout: 15000 });
 
 		const alexaFeed = [];
-		const maxNews = 5;
 
-		for (let i = 0; i < maxNews; i++) {
-			// Forcing click on index
-			await page.evaluate((index) => {
-				const enlaces = document.querySelectorAll('main a[href*="/bbcl-en-5-minutos/"]');
-				if (enlaces && enlaces[index]) {
-					enlaces[index].click();
-				}
-			}, i);
+		// Forcing click on the first visible card to trigger the continuous view
+		await page.evaluate(() => {
+			const enlaces = document.querySelectorAll('main a[href*="/bbcl-en-5-minutos/"]');
+			if (enlaces && enlaces[0]) {
+				enlaces[0].click();
+			}
+		});
 
-			await page.waitForTimeout(1000);
+		await page.waitForTimeout(1500); // Wait for Nuxt to render all 5 articles
 
-			const newsData = await page.evaluate((index) => {
-				let title = "";
-				let newsText = "";
+		const allArticles = await page.evaluate(() => {
+			const articles = document.querySelectorAll('main article, main div.relative.min-w-0');
+			const articlesToCheck = 5;
+			const extracted = [];
 
-				const articles = document.querySelectorAll('main article, main div.relative.min-w-0');
-
-				const currentArticle = articles[index];
+			for (let i = 0; i < articlesToCheck; i++) {
+				const currentArticle = articles[i];
 
 				if (currentArticle) {
+					let title = "";
+					let newsText = "";
+
 					const h2Title = currentArticle.querySelector('h2');
 					if (h2Title) {
 						title = h2Title.textContent.trim();
 					}
 
 					const paragraphs = currentArticle.querySelectorAll('p, h4');
-
 					paragraphs.forEach(paragraph => {
 						let text = paragraph.textContent.trim();
 
@@ -68,46 +68,46 @@ async function scrapeBioBio() {
 							newsText += text + " ";
 						}
 					});
+
+					if (title && newsText.trim()) {
+						extracted.push({
+							title: title,
+							body: newsText.trim()
+						});
+					}
 				}
+			}
+			return extracted;
+		});
 
-				return {
-					title: title,
-					body: newsText.trim()
-				};
-			}, i);
+		allArticles.forEach((article) => {
+			const paragraphs = article.body.split('. ');
+			const uniqueParagraphs = [...new Set(paragraphs)];
+			let cleanBody = uniqueParagraphs.join('. ').replace(/\s+/g, ' ').trim();
 
-			if (newsData.title && newsData.body) {
-				// Clean duplicates
-				const paragraphs = newsData.body.split('. ');
-				const uniqueParagraphs = [...new Set(paragraphs)];
-				let cleanBody = uniqueParagraphs.join('. ').replace(/\s+/g, ' ').trim();
+			// Amazon max body length for news is 4300 characters
+			if (cleanBody.length > 4300) {
+				cleanBody = cleanBody.substring(0, 4300) + "...";
+			}
 
-				// Amazon max body length for news is 4300 characters
-				if (cleanBody.length > 4300) {
-					cleanBody = cleanBody.substring(0, 4300) + "...";
-				}
+			const titleSlug = article.title
+				.toLowerCase().normalize("NFD")
+				.replace(/[\u0300-\u036f]/g, "")
+				.replace(/[^a-z0-9\s-]/g, "")
+				.trim().replace(/\s+/g, "-");
 
-				const titleSlug = newsData.title
-                    .toLowerCase().normalize("NFD")
-                    .replace(/[\u0300-\u036f]/g, "")
-                    .replace(/[^a-z0-9\s-]/g, "")
-                    .trim().replace(/\s+/g, "-");
+			const feedUID = `bbcl-${titleSlug}`;
 
+			if (!alexaFeed.some(feed => feed.uid === feedUID)) {
 				alexaFeed.push({
-					"uid": `bbcl-${titleSlug}`,
+					"uid": feedUID,
 					"updateDate": new Date().toISOString(),
-					"titleText": newsData.title,
-					"mainText": `${cleanBody}`,
+					"titleText": article.title,
+					"mainText": `${article.title}: ${cleanBody}`,
 					"redirectionUrl": url
 				});
 			}
-
-			// Internally go back on the SPA to prepare the next click
-			await page.evaluate(() => {
-				window.history.back();
-			});
-			await page.waitForTimeout(1000);
-		}
+		});
 
 		fs.writeFileSync('feed.json', JSON.stringify(alexaFeed, null, 2));
 	} catch (error) {
